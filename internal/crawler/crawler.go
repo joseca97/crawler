@@ -3,6 +3,7 @@ package crawler
 import (
 	"context"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -53,16 +54,20 @@ func (f *Fetcher) Start(ctx context.Context, startURLs []string) <-chan Result {
 
 				for _, link := range res.FoundLinks {
 					if !visited[link] {
-						visited[link] = true
+						if strings.Contains(link, "example") {
+							// if strings.Contains(link, "go.dev") || strings.Contains(link, "golang.org") {
+							visited[link] = true
 
-						activeJobs++
-
-						select {
-						case jobsChan <- Job{URL: link, Depth: 2}:
-						case <-ctx.Done():
-							goto shutdown
-						default:
-							activeJobs--
+							if f.maxDepth > 1 {
+								activeJobs++
+								select {
+								case jobsChan <- Job{URL: link, Depth: 2}:
+								case <-ctx.Done():
+									goto shutdown
+								default:
+									activeJobs--
+								}
+							}
 						}
 					}
 				}
@@ -104,13 +109,15 @@ func NewFetcher(timeout time.Duration, concurrency int, maxDepth int) *Fetcher {
 
 func (f *Fetcher) fetch(ctx context.Context, url string) Result {
 	start := time.Now()
-	reqCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	reqCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(reqCtx, "GET", url, nil)
 	if err != nil {
 		return Result{URL: url, Err: err}
 	}
+
+	req.Header.Set("User-Agent", "GoConcurrentCrawler/1.0")
 
 	resp, err := f.client.Do(req)
 	duration := time.Since(start)
@@ -121,10 +128,21 @@ func (f *Fetcher) fetch(ctx context.Context, url string) Result {
 	defer resp.Body.Close()
 
 	// Simulating found links
-	var discoveredLinks []string
-	if url == "https://golang.org" {
-		discoveredLinks = []string{"https://go.dev", "https://github.com"}
+	// var discoveredLinks []string
+	// if url == "https://golang.org" {
+	// 	discoveredLinks = []string{"https://go.dev", "https://github.com"}
+	// }
+
+	contentType := resp.Header.Get("Content-Type")
+	if !strings.Contains(contentType, "text/html") {
+		return Result{
+			URL:        url,
+			StatusCode: resp.StatusCode,
+			Duration:   duration,
+		}
 	}
+
+	discoveredLinks := extractLinks(url, resp.Body)
 
 	return Result{
 		URL:        url,

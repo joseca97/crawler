@@ -13,8 +13,10 @@ import (
 
 func main() {
 	seeds := []string{
-		"https://golang.org",
-		"https://google.com",
+		// "https://golang.org",
+		// "https://go.dev/doc/",
+		"https://example.com",
+		// "https://google.com",
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
