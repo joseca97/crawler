@@ -10,6 +10,7 @@ import (
 
 func extractLinks(baseURL string, body io.Reader) []string {
 	var links []string
+	seen := make(map[string]bool)
 
 	doc, err := html.Parse(body)
 	if err != nil {
@@ -27,7 +28,8 @@ func extractLinks(baseURL string, body io.Reader) []string {
 					cleaned := cleanLink(attr.Val)
 					if cleaned != "" {
 						absoluteURL := resolveAbsoluteURL(baseURL, cleaned)
-						if absoluteURL != "" {
+						if absoluteURL != "" && !seen[absoluteURL] {
+							seen[absoluteURL] = true
 							links = append(links, absoluteURL)
 						}
 					}
@@ -36,9 +38,6 @@ func extractLinks(baseURL string, body io.Reader) []string {
 			}
 		}
 
-		// for c := n.FirstChild; c != nil; c = n.NextSibling {
-		// 	visit(c)
-		// }
 		if n.FirstChild != nil {
 			visit(n.FirstChild)
 		}

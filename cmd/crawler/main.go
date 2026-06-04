@@ -7,17 +7,12 @@ import (
 	"os/signal"
 	"time"
 
-	// Replace "mycrawler" with your actual module name from go.mod
 	"crawler/internal/crawler"
+	"crawler/internal/crawler/cli"
 )
 
 func main() {
-	seeds := []string{
-		// "https://golang.org",
-		// "https://go.dev/doc/",
-		"https://example.com",
-		// "https://google.com",
-	}
+	cfg := cli.ParseFlags()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -31,54 +26,28 @@ func main() {
 		cancel()
 	}()
 
-	// Initialize with a 5s timeout and a strict pool of 3 workers
-	fetcher := crawler.NewFetcher(3*time.Second, 3, 2)
+	timeout := time.Duration(cfg.TimeoutSec) * time.Second
+	fetcher := crawler.NewFetcher(timeout, cfg.Concurrency, cfg.MaxDepth)
 
-	fmt.Println("Starting Recursive Crawler with State Management...")
+	fmt.Println("Starting Crawler CLI Engine...")
+	fmt.Printf("Configurations -> Workers: %d | Timeout: %s | Max Depth: %d\n", cfg.Concurrency, timeout, cfg.MaxDepth)
 	fmt.Println("--------------------------------------------------")
 
-	// Start the engine
-	results := fetcher.Start(ctx, seeds)
+	store := crawler.NewJSONLStorage(cfg.FileName, 100)
+	defer store.Close()
 
-	// 2. Consume the results as they are completed by the workers
+	results := fetcher.Start(ctx, cfg.Seeds)
+
 	for res := range results {
 		if res.Err != nil {
 			fmt.Printf("[ERROR]   %s: %v\n", res.URL, res.Err)
 		} else {
 			fmt.Printf("[SUCCESS] %s -> Found %d links (took %v)\n", res.URL, len(res.FoundLinks), res.Duration)
 		}
+
+		store.Write(res)
 	}
 
 	fmt.Println("--------------------------------------------------")
-	fmt.Println("Stage 3 Complete! All workers exited cleanly.")
+	fmt.Println("Crawl pipeline complete. Exiting cleanly")
 }
-
-// func main_two() {
-// 	urls := []string{
-// 		"https://golang.org",
-// 		"https://google.com",
-// 		"https://github.com",
-// 		"https://thisurlshouldfail12345.com",
-// 	}
-//
-// 	// Initialize the modular fetcher with a 5-second timeout
-// 	fetcher := crawler.NewFetcher(5*time.Second, 2)
-//
-// 	fmt.Println("Starting modular concurrent fetcher...")
-// 	fmt.Println("--------------------------------------------------")
-//
-// 	// Start fetching. We immediately get back a read-only channel.
-// 	results := fetcher.FetchAll(urls)
-//
-// 	// Consume results as they stream in
-// 	for res := range results {
-// 		if res.Err != nil {
-// 			fmt.Printf("[ERROR]   %s: %v (took %v)\n", res.URL, res.Err, res.Duration)
-// 		} else {
-// 			fmt.Printf("[SUCCESS] %s -> Status: %d (took %v)\n", res.URL, res.StatusCode, res.Duration)
-// 		}
-// 	}
-//
-// 	fmt.Println("--------------------------------------------------")
-// 	fmt.Println("Stage 1 (Modular) complete!")
-// }

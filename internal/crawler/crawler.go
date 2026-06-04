@@ -3,6 +3,7 @@ package crawler
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -29,6 +30,13 @@ func (f *Fetcher) Start(ctx context.Context, startURLs []string) <-chan Result {
 		}(i)
 	}
 
+	allowedHost := ""
+	if len(startURLs) > 0 {
+		if u, err := url.Parse(startURLs[0]); err == nil {
+			allowedHost = u.Host
+		}
+	}
+
 	go func() {
 		visited := make(map[string]bool)
 
@@ -52,22 +60,29 @@ func (f *Fetcher) Start(ctx context.Context, startURLs []string) <-chan Result {
 					continue
 				}
 
-				for _, link := range res.FoundLinks {
-					if !visited[link] {
-						if strings.Contains(link, "example") {
-							// if strings.Contains(link, "go.dev") || strings.Contains(link, "golang.org") {
-							visited[link] = true
+				nextDepth := res.Depth + 1
 
-							if f.maxDepth > 1 {
-								activeJobs++
-								select {
-								case jobsChan <- Job{URL: link, Depth: 2}:
-								case <-ctx.Done():
-									goto shutdown
-								default:
-									activeJobs--
-								}
-							}
+				if nextDepth > f.maxDepth {
+					continue
+				}
+
+				for _, link := range res.FoundLinks {
+
+					parsedLink, err := url.Parse(link)
+					if err != nil || parsedLink.Host != allowedHost {
+						continue
+					}
+
+					if !visited[link] {
+						visited[link] = true
+						activeJobs++
+
+						select {
+						case jobsChan <- Job{URL: link, Depth: nextDepth}:
+						case <-ctx.Done():
+							goto shutdown
+						default:
+							activeJobs--
 						}
 					}
 				}
@@ -92,7 +107,10 @@ func (f *Fetcher) worker(ctx context.Context, jobs <-chan Job, results chan<- Re
 			if !ok {
 				return
 			}
-			results <- f.fetch(ctx, job.URL)
+			res := f.fetch(ctx, job.URL)
+			res.Depth = job.Depth
+
+			results <- res
 		}
 	}
 }
@@ -109,10 +127,10 @@ func NewFetcher(timeout time.Duration, concurrency int, maxDepth int) *Fetcher {
 
 func (f *Fetcher) fetch(ctx context.Context, url string) Result {
 	start := time.Now()
-	reqCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
+	// reqCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	// defer cancel()
 
-	req, err := http.NewRequestWithContext(reqCtx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return Result{URL: url, Err: err}
 	}
@@ -126,12 +144,6 @@ func (f *Fetcher) fetch(ctx context.Context, url string) Result {
 		return Result{URL: url, Duration: duration, Err: err}
 	}
 	defer resp.Body.Close()
-
-	// Simulating found links
-	// var discoveredLinks []string
-	// if url == "https://golang.org" {
-	// 	discoveredLinks = []string{"https://go.dev", "https://github.com"}
-	// }
 
 	contentType := resp.Header.Get("Content-Type")
 	if !strings.Contains(contentType, "text/html") {
