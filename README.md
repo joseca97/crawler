@@ -38,7 +38,7 @@ Ensure you have Go installed (version 1.18+ recommended).
 
 The crawler requires a seed list of URLs to begin. All other parameters fall back to safe, tested defaults.
 
-./crawler -urls="https://go.dev"
+`./crawler -urls="https://go.dev"`
 
 ### Command Line Flags
 
@@ -52,7 +52,7 @@ The crawler requires a seed list of URLs to begin. All other parameters fall bac
 
 ### Execution Example
 
-./crawler -urls="https://go.dev,https://example.com" -workers=5 -depth=3 -file="my_crawl.jsonl" -timeout=10
+`./crawler -urls="https://go.dev,https://example.com" -workers=5 -depth=3 -file="my_crawl.jsonl" -timeout=10`
 
 ---
 
@@ -61,6 +61,7 @@ The crawler requires a seed list of URLs to begin. All other parameters fall bac
 The system outputs data using the **JSON Lines (`.jsonl`)** standard. Each row represents an isolated, valid JSON object corresponding to a crawled URL.
 
 ### Successful Fetch
+```
 {
   "url": "https://go.dev",
   "status_code": 200,
@@ -71,8 +72,10 @@ The system outputs data using the **JSON Lines (`.jsonl`)** standard. Each row r
     "https://go.dev/learn/"
   ]
 }
+```
 
 ### Connection Error / Timeout
+```
 {
   "url": "https://some-broken-domain.com",
   "status_code": 0,
@@ -80,6 +83,7 @@ The system outputs data using the **JSON Lines (`.jsonl`)** standard. Each row r
   "depth": 2,
   "error": "context deadline exceeded"
 }
+```
 
 *Note: Successful fields that are empty (like `error` on success or `found_links` on a failure) are automatically omitted using `omitempty` to maintain an incredibly light storage footprint.*
 
@@ -90,7 +94,7 @@ The system outputs data using the **JSON Lines (`.jsonl`)** standard. Each row r
 The project separates core logic packages to maintain clean white-box and black-box testing boundaries. You can execute the test suite across parsing algorithms, mocks, and concurrent data pipelines via the Go toolchain.
 
 Run all unit tests:
-go test ./...
+`go test ./...`
 
 Run tests with the **Go Race Detector** enabled to check for concurrent pipeline memory leaks or thread conflicts:
-go test -race ./...
+`go test -race ./...`
