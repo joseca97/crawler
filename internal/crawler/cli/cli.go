@@ -25,7 +25,7 @@ func ParseFlags() CLIConfig {
 	)
 
 	flag.StringVar(&rawURLs, "urls", "", "Comma-separated list of seed URLs to crawl")
-	flag.StringVar(&fileName, "file", "crawl_output.txt", "Output file name")
+	flag.StringVar(&fileName, "file", "crawl_output.jsonl", "Output file name")
 	flag.IntVar(&concurrency, "workers", 3, "Number of concurrent worker threads")
 	flag.IntVar(&timeoutSec, "timeout", 5, "HTTP Request timeout in seconds")
 	flag.IntVar(&maxDepth, "depth", 2, "Maximum depth for recursive crawling")
