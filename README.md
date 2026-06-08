@@ -17,10 +17,10 @@ A highly efficient, concurrent web crawler written in Go. The application levera
 Ensure you have Go installed (version 1.18+ recommended).
 
 1. Clone the repository:
-```
+   ```
    git clone https://github.com/yourusername/concurrent-web-crawler.git
    cd concurrent-web-crawler
-```
+   ```
 
 2. Download dependencies (if any):
    ```
@@ -28,9 +28,9 @@ Ensure you have Go installed (version 1.18+ recommended).
    ```
 
 3. Build the executable:
-```
+   ```
    go build -o crawler ./cmd/crawler
-```
+   ```
 
 ---
 
