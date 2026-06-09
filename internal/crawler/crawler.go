@@ -56,7 +56,7 @@ func (f *Fetcher) Start(ctx context.Context, startURLs []string) <-chan Result {
 
 				outChan <- res
 
-				if res.Err != nil {
+				if res.Err != nil || res.StatusCode != 200 {
 					continue
 				}
 
@@ -69,7 +69,11 @@ func (f *Fetcher) Start(ctx context.Context, startURLs []string) <-chan Result {
 				for _, link := range res.FoundLinks {
 
 					parsedLink, err := url.Parse(link)
-					if err != nil || parsedLink.Host != allowedHost {
+					if err != nil {
+						continue
+					}
+
+					if parsedLink.Host != "" && parsedLink.Host != allowedHost {
 						continue
 					}
 
