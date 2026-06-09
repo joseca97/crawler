@@ -39,21 +39,33 @@ func (f *Fetcher) Start(ctx context.Context, startURLs []string) <-chan Result {
 
 	go func() {
 		visited := make(map[string]bool)
+		var queue []Job
 
 		for _, url := range startURLs {
 			visited[url] = true
-			jobsChan <- Job{URL: url, Depth: 1}
+			queue = append(queue, Job{URL: url, Depth: 1})
 		}
 
 		activeJobs := len(startURLs)
 
 		for activeJobs > 0 {
+			var sendChan chan<- Job
+			var nextJob Job
+
+			if len(queue) > 0 {
+				sendChan = jobsChan
+				nextJob = queue[0]
+			}
+
 			select {
 			case <-ctx.Done():
 				goto shutdown
+
+			case sendChan <- nextJob:
+				queue = queue[1:]
+
 			case res := <-resultsChan:
 				activeJobs--
-
 				outChan <- res
 
 				if res.Err != nil || res.StatusCode != 200 {
@@ -81,13 +93,7 @@ func (f *Fetcher) Start(ctx context.Context, startURLs []string) <-chan Result {
 						visited[link] = true
 						activeJobs++
 
-						select {
-						case jobsChan <- Job{URL: link, Depth: nextDepth}:
-						case <-ctx.Done():
-							goto shutdown
-						default:
-							activeJobs--
-						}
+						queue = append(queue, Job{URL: link, Depth: nextDepth})
 					}
 				}
 			}
@@ -131,8 +137,6 @@ func NewFetcher(timeout time.Duration, concurrency int, maxDepth int) *Fetcher {
 
 func (f *Fetcher) fetch(ctx context.Context, url string) Result {
 	start := time.Now()
-	// reqCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
-	// defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
