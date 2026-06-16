@@ -27,10 +27,10 @@ func main() {
 	}()
 
 	timeout := time.Duration(cfg.TimeoutSec) * time.Second
-	fetcher := crawler.NewFetcher(timeout, cfg.Concurrency, cfg.MaxDepth)
+	fetcher := crawler.NewFetcher(timeout, cfg.Concurrency, cfg.MaxDepth, cfg.ExcludePatterns)
 
 	fmt.Println("Starting Crawler CLI Engine...")
-	fmt.Printf("Configurations -> Workers: %d | Timeout: %s | Max Depth: %d\n", cfg.Concurrency, timeout, cfg.MaxDepth)
+	fmt.Printf("Configurations -> Workers: %d | Timeout: %s | Max Depth: %d | Excludes: %d\n", cfg.Concurrency, timeout, cfg.MaxDepth, len(cfg.ExcludePatterns))
 	fmt.Println("--------------------------------------------------")
 
 	store := crawler.NewJSONLStorage(cfg.FileName, 100)

@@ -10,9 +10,20 @@ import (
 )
 
 type Fetcher struct {
-	client      *http.Client
-	concurrency int
-	maxDepth    int
+	client          *http.Client
+	concurrency     int
+	maxDepth        int
+	allowedHost     string
+	excludePatterns []string
+}
+
+func (f *Fetcher) shouldExclude(urlStr string) bool {
+	for _, p := range f.excludePatterns {
+		if strings.Contains(urlStr, p) {
+			return true
+		}
+	}
+	return false
 }
 
 func (f *Fetcher) Start(ctx context.Context, startURLs []string) <-chan Result {
@@ -30,10 +41,9 @@ func (f *Fetcher) Start(ctx context.Context, startURLs []string) <-chan Result {
 		}(i)
 	}
 
-	allowedHost := ""
 	if len(startURLs) > 0 {
 		if u, err := url.Parse(startURLs[0]); err == nil {
-			allowedHost = u.Host
+			f.allowedHost = u.Host
 		}
 	}
 
@@ -68,6 +78,10 @@ func (f *Fetcher) Start(ctx context.Context, startURLs []string) <-chan Result {
 				activeJobs--
 				outChan <- res
 
+				if res.FinalURL != "" && res.FinalURL != res.URL {
+					visited[res.FinalURL] = true
+				}
+
 				if res.Err != nil || res.StatusCode != 200 {
 					continue
 				}
@@ -85,11 +99,11 @@ func (f *Fetcher) Start(ctx context.Context, startURLs []string) <-chan Result {
 						continue
 					}
 
-					if parsedLink.Host != "" && parsedLink.Host != allowedHost {
+					if parsedLink.Host != "" && parsedLink.Host != f.allowedHost {
 						continue
 					}
 
-					if !visited[link] {
+					if !visited[link] && !f.shouldExclude(link) {
 						visited[link] = true
 						activeJobs++
 
@@ -125,14 +139,28 @@ func (f *Fetcher) worker(ctx context.Context, jobs <-chan Job, results chan<- Re
 	}
 }
 
-func NewFetcher(timeout time.Duration, concurrency int, maxDepth int) *Fetcher {
-	return &Fetcher{
-		client: &http.Client{
-			Timeout: timeout,
-		},
-		concurrency: concurrency,
-		maxDepth:    maxDepth,
+func NewFetcher(timeout time.Duration, concurrency int, maxDepth int, excludePatterns []string) *Fetcher {
+	f := &Fetcher{
+		concurrency:     concurrency,
+		maxDepth:        maxDepth,
+		excludePatterns: excludePatterns,
 	}
+
+	f.client = &http.Client{
+		Timeout: timeout,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return http.ErrUseLastResponse
+			}
+			// If allowedHost is set, ensure redirects stay within it
+			if f.allowedHost != "" && req.URL.Host != f.allowedHost {
+				return http.ErrUseLastResponse
+			}
+			return nil
+		},
+	}
+
+	return f
 }
 
 func (f *Fetcher) fetch(ctx context.Context, url string) Result {
@@ -153,19 +181,23 @@ func (f *Fetcher) fetch(ctx context.Context, url string) Result {
 	}
 	defer resp.Body.Close()
 
+	finalURL := resp.Request.URL.String()
+
 	contentType := resp.Header.Get("Content-Type")
 	if !strings.Contains(contentType, "text/html") {
 		return Result{
 			URL:        url,
+			FinalURL:   finalURL,
 			StatusCode: resp.StatusCode,
 			Duration:   duration,
 		}
 	}
 
-	discoveredLinks := extractLinks(url, resp.Body)
+	discoveredLinks := extractLinks(finalURL, resp.Body)
 
 	return Result{
 		URL:        url,
+		FinalURL:   finalURL,
 		FoundLinks: discoveredLinks,
 		StatusCode: resp.StatusCode,
 		Duration:   duration,

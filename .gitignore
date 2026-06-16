@@ -8,6 +8,10 @@
 *.so
 *.dylib
 
+# Output files (.json, .jsonl)
+*.json
+*.jsonl
+
 # Test binary, built with `go test -c`
 *.test
 

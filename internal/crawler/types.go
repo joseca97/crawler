@@ -12,6 +12,7 @@ type Job struct {
 
 type Result struct {
 	URL        string
+	FinalURL   string
 	FoundLinks []string
 	StatusCode int
 	Duration   time.Duration
@@ -29,6 +30,7 @@ func (r Result) MarshalJSON() ([]byte, error) {
 		Duration   string   `json:"duration"`
 		Err        string   `json:"error,omitempty"`
 		URL        string   `json:"url"`
+		FinalURL   string   `json:"final_url,omitempty"`
 		StatusCode int      `json:"status_code"`
 		FoundLinks []string `json:"found_links,omitempty"`
 		Depth      int      `json:"depth"`
@@ -36,6 +38,7 @@ func (r Result) MarshalJSON() ([]byte, error) {
 		Duration:   r.Duration.String(),
 		Err:        errString,
 		URL:        r.URL,
+		FinalURL:   r.FinalURL,
 		StatusCode: r.StatusCode,
 		FoundLinks: r.FoundLinks,
 		Depth:      r.Depth,
