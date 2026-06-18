@@ -49,10 +49,11 @@ The crawler requires a seed list of URLs to begin. All other parameters fall bac
 | `-depth` | int | 2 | Maximum depth boundary for recursive link extraction. |
 | `-workers`| int | 3 | Number of concurrent network worker routines to spin up. |
 | `-timeout`| int | 5 | Maximum HTTP request timeout threshold in seconds. |
+| `-exclude`| string | "" | Maximum HTTP request timeout threshold in seconds. |
 
 ### Execution Example
 
-`./crawler -urls="https://go.dev,https://example.com" -workers=5 -depth=3 -file="my_crawl.jsonl" -timeout=10`
+`./crawler -urls="https://go.dev" -workers=5 -depth=3 -file="my_crawl.jsonl" -timeout=10 -exclude="/docs/,/search/`
 
 ---
 
