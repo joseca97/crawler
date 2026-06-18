@@ -32,14 +32,7 @@ func (f *Fetcher) Start(ctx context.Context, startURLs []string) <-chan Result {
 	outChan := make(chan Result, 500)
 
 	var wg sync.WaitGroup
-
-	for i := 0; i < f.concurrency; i++ {
-		wg.Add(1)
-		go func(workerId int) {
-			defer wg.Done()
-			f.worker(ctx, jobsChan, resultsChan)
-		}(i)
-	}
+	f.startWorkers(ctx, &wg, jobsChan, resultsChan)
 
 	if len(startURLs) > 0 {
 		if u, err := url.Parse(startURLs[0]); err == nil {
@@ -47,79 +40,92 @@ func (f *Fetcher) Start(ctx context.Context, startURLs []string) <-chan Result {
 		}
 	}
 
-	go func() {
-		visited := make(map[string]bool)
-		var queue []Job
+	go f.runCoordinator(ctx, startURLs, jobsChan, resultsChan, outChan, &wg)
 
-		for _, url := range startURLs {
-			visited[url] = true
-			queue = append(queue, Job{URL: url, Depth: 1})
-		}
+	return outChan
+}
 
-		activeJobs := len(startURLs)
-
-		for activeJobs > 0 {
-			var sendChan chan<- Job
-			var nextJob Job
-
-			if len(queue) > 0 {
-				sendChan = jobsChan
-				nextJob = queue[0]
-			}
-
-			select {
-			case <-ctx.Done():
-				goto shutdown
-
-			case sendChan <- nextJob:
-				queue = queue[1:]
-
-			case res := <-resultsChan:
-				activeJobs--
-				outChan <- res
-
-				if res.FinalURL != "" && res.FinalURL != res.URL {
-					visited[res.FinalURL] = true
-				}
-
-				if res.Err != nil || res.StatusCode != 200 {
-					continue
-				}
-
-				nextDepth := res.Depth + 1
-
-				if nextDepth > f.maxDepth {
-					continue
-				}
-
-				for _, link := range res.FoundLinks {
-
-					parsedLink, err := url.Parse(link)
-					if err != nil {
-						continue
-					}
-
-					if parsedLink.Host != "" && parsedLink.Host != f.allowedHost {
-						continue
-					}
-
-					if !visited[link] && !f.shouldExclude(link) {
-						visited[link] = true
-						activeJobs++
-
-						queue = append(queue, Job{URL: link, Depth: nextDepth})
-					}
-				}
-			}
-		}
-
-	shutdown:
+func (f *Fetcher) runCoordinator(ctx context.Context, startURLs []string, jobsChan chan Job, resultsChan chan Result, outChan chan Result, wg *sync.WaitGroup) {
+	defer func() {
 		close(jobsChan)
 		wg.Wait()
 		close(outChan)
 	}()
 
-	return outChan
+	visited := make(map[string]bool)
+	var queue []Job
+
+	for _, url := range startURLs {
+		visited[url] = true
+		queue = append(queue, Job{URL: url, Depth: 1})
+	}
+
+	activeJobs := len(startURLs)
+
+	for activeJobs > 0 {
+		var sendChan chan<- Job
+		var nextJob Job
+
+		if len(queue) > 0 {
+			sendChan = jobsChan
+			nextJob = queue[0]
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+
+		case sendChan <- nextJob:
+			queue = queue[1:]
+
+		case res := <-resultsChan:
+			activeJobs--
+			outChan <- res
+			f.handleResult(res, visited, &queue, &activeJobs)
+		}
+	}
+}
+
+func (f *Fetcher) handleResult(res Result, visited map[string]bool, queue *[]Job, activeJobs *int) {
+	if res.FinalURL != "" && res.FinalURL != res.URL {
+		visited[res.FinalURL] = true
+	}
+
+	if res.Err != nil || res.StatusCode != 200 {
+		return
+	}
+
+	nextDepth := res.Depth + 1
+	if nextDepth > f.maxDepth {
+		return
+	}
+
+	for _, link := range res.FoundLinks {
+		parsedLink, err := url.Parse(link)
+		if err != nil {
+			continue
+		}
+
+		if parsedLink.Host != "" && parsedLink.Host != f.allowedHost {
+			continue
+		}
+
+		if !visited[link] && !f.shouldExclude(link) {
+			visited[link] = true
+			*activeJobs++
+			*queue = append(*queue, Job{URL: link, Depth: nextDepth})
+		}
+	}
+}
+
+func (f *Fetcher) startWorkers(ctx context.Context, wg *sync.WaitGroup, jobsChan chan Job, resultsChan chan Result) {
+	for i := 0; i < f.concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			f.worker(ctx, jobsChan, resultsChan)
+		}()
+	}
 }
 
 func (f *Fetcher) worker(ctx context.Context, jobs <-chan Job, results chan<- Result) {
